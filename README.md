@@ -1,20 +1,14 @@
 # Docker + Kubernetes + GitHub Actions CI/CD
 
-A simple DevOps portfolio project demonstrating a development-to-production workflow using Docker, Kubernetes and GitHub Actions.
+A DevOps portfolio project demonstrating a development-to-production workflow using Docker, Kubernetes, GitHub Actions and GitHub Container Registry (GHCR).
 
 ## Architecture
 
-Developer -> `dev` branch -> GitHub Actions -> Docker image -> GHCR -> Dev Kubernetes environment
+Developer -> `dev` branch -> GitHub Actions -> Docker image -> GHCR -> temporary Kind Kubernetes cluster -> Dev namespace
 
-Developer -> Pull Request `dev` -> `main` -> Review/Approval -> GitHub Actions -> Docker image -> GHCR -> Production Kubernetes environment
+Developer -> Pull Request `dev` -> `main` -> Review/Approval -> GitHub Actions -> Docker image -> GHCR -> temporary Kind Kubernetes cluster -> Prod namespace
 
-## Project requirements
-
-- Docker
-- Kubernetes cluster (Minikube, Kind, AKS, EKS, etc.)
-- kubectl
-- GitHub repository
-- GitHub Container Registry (GHCR)
+> The CI workflows use an ephemeral Kubernetes cluster created inside the GitHub Actions runner. This makes the demo fully testable without an Azure/AWS/GCP Kubernetes cluster.
 
 ## Local Docker test
 
@@ -65,26 +59,18 @@ Workflows:
 - `.github/workflows/dev.yml` - development CI/CD
 - `.github/workflows/prod.yml` - production CI/CD
 
-The workflows validate the Python application, build Docker images and publish them to GitHub Container Registry. Kubernetes deployment steps run when the corresponding GitHub Environment has a `KUBE_CONFIG` secret configured.
+Each workflow:
+1. Checks out the code.
+2. Installs Python dependencies and validates the application.
+3. Builds a Docker image.
+4. Pushes the image to GHCR.
+5. Pulls the image into the GitHub runner.
+6. Creates an ephemeral Kubernetes cluster using Kind.
+7. Loads the image into the cluster.
+8. Deploys the appropriate Kubernetes manifests.
+9. Waits for the Deployment rollout and displays Pods/Services.
 
-## GitHub Environment secrets
-
-Create these GitHub Environments:
-
-- `development`
-- `production`
-
-For each environment, add:
-
-- `KUBE_CONFIG` = base64-encoded kubeconfig for the target cluster.
-
-Example:
-
-```bash
-base64 -w 0 ~/.kube/config
-```
-
-Do not commit kubeconfig files, passwords or tokens.
+No `KUBE_CONFIG` secret is required for this demo because the Kubernetes cluster is created inside the same GitHub Actions runner.
 
 ## Branch protection
 
@@ -104,16 +90,15 @@ See `docs/branch-protection.md`.
 - Separate dev and prod namespaces
 - GitHub Actions CI/CD
 - GitHub Container Registry
-- Automatic development deployment after a push to `dev` when cluster credentials are configured
+- Ephemeral Kubernetes testing with Kind
 - Pull-request promotion from `dev` to `main`
-- Production deployment after merge when production cluster credentials are configured
 - Kubernetes readiness/liveness probes and resource limits
 - Environment-specific configuration
 
 ## Interview explanation
 
-"I created a DevOps CI/CD project where the dev branch is used for development and main is protected for production. A push to dev triggers GitHub Actions, which validates the application, builds a Docker image, pushes it to GHCR and deploys it to the development Kubernetes cluster when the development environment is configured. For production, changes are promoted through a pull request from dev to main. After review and approval, merging to main triggers a separate workflow that builds the production image and deploys it to the production Kubernetes cluster. I kept dev and prod isolated using separate Kubernetes namespaces and GitHub Environments."
+"I created a DevOps CI/CD project where the dev branch is used for development and main is protected for production. A push to dev triggers GitHub Actions, which validates the application, builds a Docker image, pushes it to GHCR, creates a temporary Kind Kubernetes cluster, loads the image into the cluster and deploys it to the development namespace. For production, changes are promoted through a pull request from dev to main. After review and approval, merging to main triggers a separate workflow that performs the same build and deployment process in the production namespace. I kept dev and prod isolated using separate Kubernetes namespaces."
 
-## Note
+## Important note
 
-This is a portfolio/demo implementation. Configure your own Kubernetes cluster and GitHub Environment secrets before claiming a live cloud deployment.
+This is a CI/CD portfolio demonstration. The Kubernetes clusters created by GitHub Actions are temporary and exist only for the duration of each workflow run. For a real production system, the Kind cluster should be replaced with a persistent AKS, EKS, GKE or other managed Kubernetes cluster.
