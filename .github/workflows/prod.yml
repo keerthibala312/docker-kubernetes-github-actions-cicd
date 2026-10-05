@@ -46,10 +46,16 @@ jobs:
             ${{ env.IMAGE }}:prod-${{ github.sha }}
             ${{ env.IMAGE }}:prod
 
-      - name: Set kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+      - name: Pull image for the local CI cluster
+        run: docker pull ${{ env.IMAGE }}:prod-${{ github.sha }}
+
+      - name: Create Kubernetes cluster
+        uses: helm/kind-action@v1.14.0
+        with:
+          cluster_name: prod-cluster
+
+      - name: Load image into Kubernetes cluster
+        run: kind load docker-image ${{ env.IMAGE }}:prod-${{ github.sha }} --name prod-cluster
 
       - name: Deploy to production
         run: |
@@ -57,3 +63,5 @@ jobs:
           kubectl apply -f k8s/namespaces.yaml
           kubectl apply -f k8s/prod/
           kubectl -n prod rollout status deployment/demo-app --timeout=180s
+          kubectl -n prod get pods
+          kubectl -n prod get svc
