@@ -1,0 +1,57 @@
+name: Dev CI/CD
+
+on:
+  push:
+    branches: ["dev"]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/devops-demo
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: development
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies and test
+        run: |
+          pip install -r requirements.txt
+          python -m py_compile app.py
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}:dev-${{ github.sha }}
+
+      - name: Set kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Deploy to development
+        run: |
+          sed -i "s#ghcr.io/keerthibala312/devops-demo:dev#${{ env.IMAGE }}:dev-${{ github.sha }}#" k8s/dev/deployment.yaml
+          kubectl apply -f k8s/namespaces.yaml
+          kubectl apply -f k8s/dev/
+          kubectl -n dev rollout status deployment/demo-app --timeout=180s
