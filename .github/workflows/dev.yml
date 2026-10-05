@@ -44,10 +44,16 @@ jobs:
           push: true
           tags: ${{ env.IMAGE }}:dev-${{ github.sha }}
 
-      - name: Set kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+      - name: Pull image for the local CI cluster
+        run: docker pull ${{ env.IMAGE }}:dev-${{ github.sha }}
+
+      - name: Create Kubernetes cluster
+        uses: helm/kind-action@v1.14.0
+        with:
+          cluster_name: dev-cluster
+
+      - name: Load image into Kubernetes cluster
+        run: kind load docker-image ${{ env.IMAGE }}:dev-${{ github.sha }} --name dev-cluster
 
       - name: Deploy to development
         run: |
@@ -55,3 +61,5 @@ jobs:
           kubectl apply -f k8s/namespaces.yaml
           kubectl apply -f k8s/dev/
           kubectl -n dev rollout status deployment/demo-app --timeout=180s
+          kubectl -n dev get pods
+          kubectl -n dev get svc
